@@ -33,8 +33,10 @@ long volatile MainTimer; // millis
 int DisplayLevel = 0;
 
 int DsHour;
+int DsMinute;
 
 float Temperature;
+float Humidity;
 
 bool heating = 0;
 bool Light = 0;
@@ -43,6 +45,8 @@ int LightLevelFirstHalf = 0;
 int LightLevelSecenfHalf = 0;
 //########################################################################### User Set Variables
 volatile float SetTemperature;
+
+volatile boolean AllTimeHeating;
 
 volatile long SetStartDayTemperature;
 volatile long SetEndDayTemperature;
@@ -126,6 +130,77 @@ const unsigned char jaszczura [] PROGMEM = {
   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
 };
+const unsigned char Thermometer[] PROGMEM = {
+  B00000000,B00000000,B00000000,
+  B00000000,B00000000,B00000000,
+  B00000000,B00000000,B00001100,
+  B00000000,B00000000,B00011110,
+  B00000000,B01111110,B00011110,
+  B00000000,B11111111,B00001100,
+  B00000001,B11000011,B10000000,
+  B00000011,B10000001,B11000000,
+  B00000111,B00000000,B11000000,
+  B00000110,B00000000,B01100000,
+  B00000110,B00000000,B01100000,
+  B00000110,B00000000,B01100000,
+  B00000110,B00000000,B01100000,
+  B00000110,B00000000,B01100000,
+  B00000110,B00000000,B01100000,
+  B00000110,B00000000,B01100000,
+  B00000110,B00000000,B01100000,
+  B00000110,B00000000,B01100000,
+  B00000110,B00000000,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000011,B00111100,B11100000,
+  B00000011,B10000000,B11000000,
+  B00000001,B11000011,B10000000,
+  B00000000,B11111111,B00000000,
+  B00000000,B01111110,B00000000,
+  B00000000,B00000000,B00000000,
+  B00000000,B00000000,B00000000,
+  B00000000,B00000000,B00000000,
+  B00000000,B00000000,B00000000
+};
+const unsigned char Higrometer[] PROGMEM = {
+  B00000000,B00000000,B00011111,
+  B00000000,B01100000,B00011111,
+  B00000000,B01110000,B00011111,
+  B00000000,B11110000,B00011111,
+  B00000001,B11111000,B00011111,
+  B00000001,B10011000,B00011111,
+  B00000011,B10011100,B00011111,
+  B00000011,B00001100,B00011111,
+  B00000110,B00000110,B00011111,
+  B00001110,B00000111,B00011111,
+  B00001100,B00000011,B00011111,
+  B00011100,B00000011,B10011111,
+  B00011000,B00000001,B10011111,
+  B00111000,B00000001,B11011111,
+  B00110000,B00000000,B11011111,
+  B00110000,B00000000,B11011111,
+  B00110000,B00000000,B11011111,
+  B00110000,B00000000,B11011111,
+  B00111000,B00000001,B11011111,
+  B00011000,B00000001,B10011111,
+  B00011100,B00000011,B10011111,
+  B00001111,B00000111,B00011111,
+  B00000111,B11111110,B00011111,
+  B00000001,B11111000,B00011111,
+  B00000000,B00000000,B00011111
+};
 //########################################################################### Setup
 void setup() {
   Serial.begin(115200);
@@ -134,6 +209,11 @@ void setup() {
   pinMode(5, OUTPUT); // Heatint Mat
   pinMode(11, OUTPUT); // White Led Tranzistor
   pinMode(5, OUTPUT); // secend tranzistor doesnt work
+
+  pinMode(confirm_pin, INPUT_PULLUP);
+  pinMode(back_pin, INPUT_PULLUP);
+  pinMode(Next_pin, INPUT_PULLUP);
+  pinMode(Undo_Pressed, INPUT_PULLUP);
 
   attachInterrupt(confirm_pin, ConfirmPressed, CHANGE);
   attachInterrupt(back_pin, BackPressed, CHANGE);
@@ -251,19 +331,166 @@ class CriticalFunctions{
 //########################################################################### Display
 class DisplayHandlaer{
   public:
-    void Screan1() {
-
+    void DefaultScrean() {
+      display.clearDisplay();
+      display.drawBitmap(0, 0, Thermometer, 24, 42, WHITE);
+      display.drawBitmap(65, 13, Higrometer, 19, 25, WHITE);
+      display.setCursor(25, 20);
+      display.setTextSize(2);
+      display.setTextColor(WHITE);
+      display.print(Temperature);
+      display.setCursor(90, 20);
+      display.print(Humidity, "%");
+      display.setCursor(32, 46);
+      display.print(DsHour, ":");
+      display.print(DsMinute);
+      display.display();
     }
     void ImageDisplay() {
       display.clearDisplay();
       switch (DisplayLevel) {
         case 0:
+          display.setTextSize(1);
           display.setCursor(0,0);
-        break;
-      
-      default:
+          display.print("> Time Config Light");
+          display.setCursor(0,12);
+          display.print("  Temperature Config");
+          display.setCursor(0,24);
+          display.print("  Meters Reading");
+          display.setCursor(0,36);
+          display.print("  Output Test");
+          display.setCursor(30, 55);
+          display.print("Version 2.0");
+          break;
 
-        break;
+        case 1:
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("  Time Config Light");
+          display.setCursor(0,12);
+          display.print("> Temperature Config");
+          display.setCursor(0,24);
+          display.print("  Meters Reading");
+          display.setCursor(0,36);
+          display.print("  Output Test");
+          display.setCursor(30, 55);
+          display.print("Version 2.0");
+          break;
+
+        case 2:
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("  Time Config Light");
+          display.setCursor(0,12);
+          display.print("  Temperature Config");
+          display.setCursor(0,24);
+          display.print("> Meters Reading");
+          display.setCursor(0,36);
+          display.print("  Output Test");
+          display.setCursor(30, 55);
+          display.print("Version 2.0");
+          break;
+
+        case 3:
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("  Time Config Light");
+          display.setCursor(0,12);
+          display.print("  Temperature Config");
+          display.setCursor(0,24);
+          display.print("  Meters Reading");
+          display.setCursor(0,36);
+          display.print("> Output Test");
+          display.setCursor(30, 55);
+          display.print("Version 2.0");
+          break;
+
+        case 4: // Inside Time Config Light
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("> Start hour ");
+          display.print(SetStartDayLight);
+          display.setCursor(0,10);
+          display.print("  Stop hour");
+          display.print(SetEndDayLight);
+          break;
+
+        case 5:// Inside Time Config Light
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("  Start hour ");
+          display.print(SetStartDayLight);
+          display.setCursor(0,10);
+          display.print("> Stop hour ");
+          display.print(SetEndDayLight);
+          break;
+
+        case 6: // Inside Config Temperature
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("> Start hour ");
+          display.print(SetStartDayTemperature);
+          display.setCursor(0,10);
+          display.print("  Stop hour ");
+          display.print(SetEndDayTemperature);
+          display.setCursor(0, 20);
+          display.print("  All Time On = ");
+          display.print(AllTimeHeating);
+          display.setCursor(0,30);
+          display.print("  Set Temp ");
+          display.print(SetTemperature);
+          break;
+
+        case 7: // Inside Config Temperature
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("  Start hour ");
+          display.print(SetStartDayTemperature);
+          display.setCursor(0,10);
+          display.print("> Stop hour ");
+          display.print(SetEndDayTemperature);
+          display.setCursor(0, 20);
+          display.print("  All Time On = ");
+          display.print(AllTimeHeating);
+          display.setCursor(0,30);
+          display.print("  Set Temp ");
+          display.print(SetTemperature);
+          break;
+
+          case 8: // Inside Config Temperature
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("  Start hour ");
+          display.print(SetStartDayTemperature);
+          display.setCursor(0,10);
+          display.print("  Stop hour ");
+          display.print(SetEndDayTemperature);
+          display.setCursor(0, 20);
+          display.print("> All Time On = ");
+          display.print(AllTimeHeating);
+          display.setCursor(0,30);
+          display.print("  Set Temp ");
+          display.print(SetTemperature);
+          break;
+
+        case 9:
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("  Start hour ");
+          display.print(SetStartDayTemperature);
+          display.setCursor(0,10);
+          display.print("  Stop hour ");
+          display.print(SetEndDayTemperature);
+          display.setCursor(0, 20);
+          display.print("  All Time On = ");
+          display.print(AllTimeHeating);
+          display.setCursor(0,30);
+          display.print("> Set Temp ");
+          display.print(SetTemperature);
+          break;
+
+        case 10: // Meters Reading
+          break;
       }
     }
 };
