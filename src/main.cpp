@@ -22,7 +22,7 @@ DHT dhtg(4,DHT11);
 RTC_DS1307 rtc;
 //########################################################################### variables
 int CounterNextPin;         //IRS
-bool CounterConfirmPin;      //
+int CounterConfirmPin;      //
 int CounterBackPin;         //
 int CounterUndoPressed;     //
 bool Lock = 0;              //
@@ -31,10 +31,17 @@ long volatile ButtonTimer;  //IRS
 long volatile MainTimer; // millis
 
 int DisplayLevel = 0;
+int DisplayLevelLocker = 0;
 
 int DsHour;
+int DsMinute;
 
 float Temperature;
+float Temperature2;
+float Temperature3;
+float Humidity;
+float Humidity2;
+float Humidity3;
 
 bool heating = 0;
 bool Light = 0;
@@ -44,11 +51,18 @@ int LightLevelSecenfHalf = 0;
 //########################################################################### User Set Variables
 volatile float SetTemperature;
 
+volatile boolean AllTimeHeating;
+
 volatile long SetStartDayTemperature;
 volatile long SetEndDayTemperature;
 
 volatile long SetStartDayLight;
 volatile long SetEndDayLight;
+
+boolean Test = false;
+boolean HeatingTest = false;
+boolean MainLightTest = false;
+boolean LedTest = false;
 //########################################################################### Structures
 
 //########################################################################### Functions declaration
@@ -126,6 +140,77 @@ const unsigned char jaszczura [] PROGMEM = {
   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
 };
+const unsigned char Thermometer[] PROGMEM = {
+  B00000000,B00000000,B00000000,
+  B00000000,B00000000,B00000000,
+  B00000000,B00000000,B00001100,
+  B00000000,B00000000,B00011110,
+  B00000000,B01111110,B00011110,
+  B00000000,B11111111,B00001100,
+  B00000001,B11000011,B10000000,
+  B00000011,B10000001,B11000000,
+  B00000111,B00000000,B11000000,
+  B00000110,B00000000,B01100000,
+  B00000110,B00000000,B01100000,
+  B00000110,B00000000,B01100000,
+  B00000110,B00000000,B01100000,
+  B00000110,B00000000,B01100000,
+  B00000110,B00000000,B01100000,
+  B00000110,B00000000,B01100000,
+  B00000110,B00000000,B01100000,
+  B00000110,B00000000,B01100000,
+  B00000110,B00000000,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000110,B01111110,B01100000,
+  B00000011,B00111100,B11100000,
+  B00000011,B10000000,B11000000,
+  B00000001,B11000011,B10000000,
+  B00000000,B11111111,B00000000,
+  B00000000,B01111110,B00000000,
+  B00000000,B00000000,B00000000,
+  B00000000,B00000000,B00000000,
+  B00000000,B00000000,B00000000,
+  B00000000,B00000000,B00000000
+};
+const unsigned char Higrometer[] PROGMEM = {
+  B00000000,B00000000,B00011111,
+  B00000000,B01100000,B00011111,
+  B00000000,B01110000,B00011111,
+  B00000000,B11110000,B00011111,
+  B00000001,B11111000,B00011111,
+  B00000001,B10011000,B00011111,
+  B00000011,B10011100,B00011111,
+  B00000011,B00001100,B00011111,
+  B00000110,B00000110,B00011111,
+  B00001110,B00000111,B00011111,
+  B00001100,B00000011,B00011111,
+  B00011100,B00000011,B10011111,
+  B00011000,B00000001,B10011111,
+  B00111000,B00000001,B11011111,
+  B00110000,B00000000,B11011111,
+  B00110000,B00000000,B11011111,
+  B00110000,B00000000,B11011111,
+  B00110000,B00000000,B11011111,
+  B00111000,B00000001,B11011111,
+  B00011000,B00000001,B10011111,
+  B00011100,B00000011,B10011111,
+  B00001111,B00000111,B00011111,
+  B00000111,B11111110,B00011111,
+  B00000001,B11111000,B00011111,
+  B00000000,B00000000,B00011111
+};
 //########################################################################### Setup
 void setup() {
   Serial.begin(115200);
@@ -134,6 +219,11 @@ void setup() {
   pinMode(5, OUTPUT); // Heatint Mat
   pinMode(11, OUTPUT); // White Led Tranzistor
   pinMode(5, OUTPUT); // secend tranzistor doesnt work
+
+  pinMode(confirm_pin, INPUT_PULLUP);
+  pinMode(back_pin, INPUT_PULLUP);
+  pinMode(Next_pin, INPUT_PULLUP);
+  pinMode(Undo_Pressed, INPUT_PULLUP);
 
   attachInterrupt(confirm_pin, ConfirmPressed, CHANGE);
   attachInterrupt(back_pin, BackPressed, CHANGE);
@@ -251,23 +341,495 @@ class CriticalFunctions{
 //########################################################################### Display
 class DisplayHandlaer{
   public:
-    void Screan1() {
-
+    void DefaultScrean() {
+      display.clearDisplay();
+      display.drawBitmap(0, 0, Thermometer, 24, 42, WHITE);
+      display.drawBitmap(65, 13, Higrometer, 19, 25, WHITE);
+      display.setCursor(25, 20);
+      display.setTextSize(2);
+      display.setTextColor(WHITE);
+      display.print(Temperature);
+      display.setCursor(90, 20);
+      display.print(Humidity, "%");
+      display.setCursor(32, 46);
+      display.print(DsHour, ":");
+      display.print(DsMinute);
+      display.display();
     }
     void ImageDisplay() {
       display.clearDisplay();
       switch (DisplayLevel) {
         case 0:
+          display.setTextSize(1);
           display.setCursor(0,0);
-        break;
-      
-      default:
+          display.print("> Time Config Light");
+          display.setCursor(0,12);
+          display.print("  Temperature Config");
+          display.setCursor(0,24);
+          display.print("  Meters Reading");
+          display.setCursor(0,36);
+          display.print("  Output Test");
+          display.setCursor(30, 55);
+          display.print("Version 2.0");
+          break;
 
-        break;
+        case 1:
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("  Time Config Light");
+          display.setCursor(0,12);
+          display.print("> Temperature Config");
+          display.setCursor(0,24);
+          display.print("  Meters Reading");
+          display.setCursor(0,36);
+          display.print("  Output Test");
+          display.setCursor(30, 55);
+          display.print("Version 2.0");
+          break;
+
+        case 2:
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("  Time Config Light");
+          display.setCursor(0,12);
+          display.print("  Temperature Config");
+          display.setCursor(0,24);
+          display.print("> Meters Reading");
+          display.setCursor(0,36);
+          display.print("  Output Test");
+          display.setCursor(30, 55);
+          display.print("Version 2.0");
+          break;
+
+        case 3:
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("  Time Config Light");
+          display.setCursor(0,12);
+          display.print("  Temperature Config");
+          display.setCursor(0,24);
+          display.print("  Meters Reading");
+          display.setCursor(0,36);
+          display.print("> Output Test");
+          display.setCursor(30, 55);
+          display.print("Version 2.0");
+          break;
+
+        case 4: // Inside Time Config Light
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("> Start hour ");
+          display.print(SetStartDayLight);
+          display.setCursor(0,10);
+          display.print("  Stop hour");
+          display.print(SetEndDayLight);
+          break;
+
+        case 5:// Inside Time Config Light
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("  Start hour ");
+          display.print(SetStartDayLight);
+          display.setCursor(0,10);
+          display.print("> Stop hour ");
+          display.print(SetEndDayLight);
+          break;
+
+        case 6: // Inside Config Temperature
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("> Start hour ");
+          display.print(SetStartDayTemperature);
+          display.setCursor(0,10);
+          display.print("  Stop hour ");
+          display.print(SetEndDayTemperature);
+          display.setCursor(0, 20);
+          display.print("  All Time On = ");
+          display.print(AllTimeHeating);
+          display.setCursor(0,30);
+          display.print("  Set Temp ");
+          display.print(SetTemperature);
+          break;
+
+        case 7: // Inside Config Temperature
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("  Start hour ");
+          display.print(SetStartDayTemperature);
+          display.setCursor(0,10);
+          display.print("> Stop hour ");
+          display.print(SetEndDayTemperature);
+          display.setCursor(0, 20);
+          display.print("  All Time On = ");
+          display.print(AllTimeHeating);
+          display.setCursor(0,30);
+          display.print("  Set Temp ");
+          display.print(SetTemperature);
+          break;
+
+          case 8: // Inside Config Temperature
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("  Start hour ");
+          display.print(SetStartDayTemperature);
+          display.setCursor(0,10);
+          display.print("  Stop hour ");
+          display.print(SetEndDayTemperature);
+          display.setCursor(0, 20);
+          display.print("> All Time On = ");
+          display.print(AllTimeHeating);
+          display.setCursor(0,30);
+          display.print("  Set Temp ");
+          display.print(SetTemperature);
+          break;
+
+        case 9: // Inside Config Temperature
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("  Start hour ");
+          display.print(SetStartDayTemperature);
+          display.setCursor(0,10);
+          display.print("  Stop hour ");
+          display.print(SetEndDayTemperature);
+          display.setCursor(0, 20);
+          display.print("  All Time On = ");
+          display.print(AllTimeHeating);
+          display.setCursor(0,30);
+          display.print("> Set Temp ");
+          display.print(SetTemperature);
+          break;
+
+        case 10: // Meters Reading
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("Down Left ");
+          display.print(Temperature);
+          display.print("C ");
+          display.print(Humidity);
+          display.print("%");
+          display.setCursor(0,12);
+          display.print("Down Right ");
+          display.print(Temperature2);
+          display.print("C ");
+          display.print(Humidity2);
+          display.print("%");
+          break;
+
+        case 11: // Tests OFF
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("> Self Test = ");
+          display.print("OFF");
+          break;
+
+        case 12: // Tests ON
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("> Self Test = ");
+          display.print("ON");
+          display.setCursor(0,12);
+          display.print("  Heater = ");
+          display.print(HeatingTest);
+          display.setCursor(0,24);
+          display.print("  Main Light = ");
+          display.print(MainLightTest);
+          display.setCursor(0,36);
+          display.print("  LED Test = ");
+          display.print(LedTest);
+          break;
+
+        case 13: // Tests ON
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("  Self Test = ");
+          display.print("ON");
+          display.setCursor(0,12);
+          display.print("> Heater = ");
+          display.print(HeatingTest);
+          display.setCursor(0,24);
+          display.print("  Main Light = ");
+          display.print(MainLightTest);
+          display.setCursor(0,36);
+          display.print("  LED Test = ");
+          display.print(LedTest);
+          break;
+
+        case 14: // Tests ON
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("  Self Test = ");
+          display.print("ON");
+          display.setCursor(0,12);
+          display.print("  Heater = ");
+          display.print(HeatingTest);
+          display.setCursor(0,24);
+          display.print("> Main Light = ");
+          display.print(MainLightTest);
+          display.setCursor(0,36);
+          display.print("  LED Test = ");
+          display.print(LedTest);
+          break;
+
+        case 15: // Tests ON
+          display.setTextSize(1);
+          display.setCursor(0,0);
+          display.print("  Self Test = ");
+          display.print("ON");
+          display.setCursor(0,12);
+          display.print("  Heater = ");
+          display.print(HeatingTest);
+          display.setCursor(0,24);
+          display.print("  Main Light = ");
+          display.print(MainLightTest);
+          display.setCursor(0,36);
+          display.print("> LED Test = ");
+          display.print(LedTest);
+          break;
       }
     }
 };
-//########################################################################### Background
+//########################################################################### Button Handlaer
+class ButtonHandlaer{
+  private:
+    void Next() {
+      switch (DisplayLevelLocker) {
+        case 0:
+          switch (DisplayLevel) {
+            case 0:
+              DisplayLevel++;
+              break;
+            
+            case 1:
+              DisplayLevel++;
+              break;
+
+            case 2:
+              DisplayLevel++;
+              break;
+
+            case 3:
+              DisplayLevel = 0;
+              break;
+            
+            case 4:
+              DisplayLevel++;
+              break;
+
+            case 5:
+              DisplayLevel = 4;
+              break;
+
+            case 6:
+              DisplayLevel++;
+              break;
+
+            case 7:
+              DisplayLevel++;
+              break;
+
+            case 8:
+              DisplayLevel++;
+              break;
+
+            case 9:
+              DisplayLevel = 6;
+              break;
+
+            case 10:
+              break;
+
+            case 11:
+              break;
+
+            case 12:
+              DisplayLevel++;
+              break;
+            
+            case 13:
+              DisplayLevel++;
+              break;
+
+            case 14:
+              DisplayLevel++;
+              break;
+
+            case 15:
+              DisplayLevel = 12;
+              break;
+          }
+          break;
+
+        case 1:  // Time Config light Start time hour
+          SetStartDayLight++;
+          break;
+
+        case 2: //Time config light End Time Hour
+          SetEndDayLight++;
+          break;
+
+        case 3: // Temperature Config Start hour
+          SetStartDayTemperature++;
+          break;
+
+        case 4: // Temperature Config Stop hour
+          SetEndDayTemperature++;
+          break;
+
+        case 5: // Temperature Config All time
+         AllTimeHeating = !AllTimeHeating;
+          break;
+
+        case 6:// Temperature Config Temperature Set
+          SetTemperature++;
+          break;
+
+        case 7: // Self Test off
+          DisplayLevel++;
+          break;
+
+        case 8: // Self Test On
+          DisplayLevel--;
+          break;
+
+        case 9: // Self Test Heating
+          HeatingTest = !HeatingTest;
+          break;
+
+        case 10: // Self Test Light
+          MainLightTest = !MainLightTest;
+          break;
+
+        case 11: // Self Test Led
+          LedTest = !LedTest;
+          break;
+        }
+    }
+
+    void Confirm() {
+      
+    }
+
+    void Back() {
+
+    }
+
+  void Undo() {
+    switch (DisplayLevelLocker) {
+        case 0:
+          switch (DisplayLevel) {
+            case 0:
+              DisplayLevel = 3;
+              break;
+            
+            case 1:
+              DisplayLevel--;
+              break;
+
+            case 2:
+              DisplayLevel--;
+              break;
+
+            case 3:
+              DisplayLevel--;
+              break;
+            
+            case 4:
+              DisplayLevel = 5;
+              break;
+
+            case 5:
+              DisplayLevel--;
+              break;
+
+            case 6:
+              DisplayLevel = 9;
+              break;
+
+            case 7:
+              DisplayLevel--;
+              break;
+
+            case 8:
+              DisplayLevel--;
+              break;
+
+            case 9:
+              DisplayLevel--;
+              break;
+
+            case 10:
+              break;
+
+            case 11:
+              break;
+
+            case 12:
+              DisplayLevel = 15;
+              break;
+            
+            case 13:
+              DisplayLevel--;
+              break;
+
+            case 14:
+              DisplayLevel--;
+              break;
+
+            case 15:
+              DisplayLevel--;
+              break;
+          }
+          break;
+/*  To End
+        case 1:  // Time Config light Start time hour
+          SetStartDayLight++;
+          break;
+
+        case 2: //Time config light End Time Hour
+          SetEndDayLight++;
+          break;
+
+        case 3: // Temperature Config Start hour
+          SetStartDayTemperature++;
+          break;
+
+        case 4: // Temperature Config Stop hour
+          SetEndDayTemperature++;
+          break;
+
+        case 5: // Temperature Config All time
+         AllTimeHeating = !AllTimeHeating;
+          break;
+
+        case 6:// Temperature Config Temperature Set
+          SetTemperature++;
+          break;
+
+        case 7: // Self Test off
+          DisplayLevel++;
+          break;
+
+        case 8: // Self Test On
+          DisplayLevel--;
+          break;
+
+        case 9: // Self Test Heating
+          HeatingTest = !HeatingTest;
+          break;
+
+        case 10: // Self Test Light
+          MainLightTest = !MainLightTest;
+          break;
+
+        case 11: // Self Test Led
+          LedTest = !LedTest;
+          break;
+        }
+  }
+*/
+
+};
+  //########################################################################### Background
 
 
 
