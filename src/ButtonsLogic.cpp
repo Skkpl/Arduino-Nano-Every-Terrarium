@@ -8,7 +8,7 @@ extern int CounterUndoPressed;     //
 extern bool Lock;              //
 extern long volatile ButtonTimer;  //IRS
 
-extern long volatile MainTimer; // millis
+extern unsigned long MainTimer; // millis
 
 extern int DisplayLevel;
 extern int DisplayLevelLocker;
@@ -45,7 +45,7 @@ extern boolean MainLightTest;
 extern boolean LedTest;
 //########################################################################### Button Handlaer
 class ButtonHandlaer{
-  private:
+  public:
     void Next() {
       switch (DisplayLevelLocker) {
         case 0:

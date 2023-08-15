@@ -30,8 +30,11 @@ int CounterBackPin;         //
 int CounterUndoPressed;     //
 bool Lock = 0;              //
 long volatile ButtonTimer;  //IRS
+bool ScreanRefreash = 0;
 
-long volatile MainTimer; // millis
+unsigned long MainTimer; // millis
+unsigned long  ScreenFrequency;
+unsigned long  FunctionalTimer;
 
 int DisplayLevel = 0;
 int DisplayLevelLocker = 0;
@@ -52,22 +55,24 @@ bool Light = 0;
 int LightLevelFirstHalf = 0;
 int LightLevelSecenfHalf = 0;
 //########################################################################### User Set Variables
-volatile float SetTemperature;
+volatile float SetTemperature = 33;
 
 volatile boolean AllTimeHeating;
 
-volatile long SetStartDayTemperature;
-volatile long SetEndDayTemperature;
+volatile long SetStartDayTemperature = 0;
+volatile long SetEndDayTemperature = 23;
 
-volatile long SetStartDayLight;
-volatile long SetEndDayLight;
+volatile long SetStartDayLight = 8;
+volatile long SetEndDayLight = 22;
 
 boolean Test = false;
 boolean HeatingTest = false;
 boolean MainLightTest = false;
 boolean LedTest = false;
-//########################################################################### Structures
-
+//########################################################################### Objects
+ButtonHandlaer ButtonsObj;
+DisplayHandlaer DisplayObj;
+CriticalFunctions FuncionalObj;
 //########################################################################### Functions declaration
 void ImageDisplay();
 void Backgroudn();
@@ -120,10 +125,23 @@ void setup() {
   }
 
   delay(3000);
+  DisplayObj.DefaultScrean();
 }
 //########################################################################### Loop
 void loop() {
-  // put your main code here, to run repeatedly:
+  MainTimer = millis();
+  if(ScreanRefreash == 1) {
+    ScreanRefreash = 0;
+  }
+  if(MainTimer - ScreenFrequency >= 100) {
+    ScreenFrequency = MainTimer;
+    ScreanRefreash = 1;
+  }
+  if(MainTimer - FunctionalTimer >= 500) {
+    FunctionalTimer = MainTimer;
+    FuncionalObj.LightHandler();
+    FuncionalObj.HeatingTimeHandlaer();
+  }
 }
 //########################################################################### ISR
 void ConfirmPressed() {
@@ -131,6 +149,8 @@ void ConfirmPressed() {
     Lock = 1;
     ButtonTimer = MainTimer;
     ++CounterConfirmPin;
+    ButtonsObj.Confirm();
+    ScreanRefreash = 1;
   }
   if(ButtonTimer - MainTimer >=50) {
     Lock = 0;
@@ -142,6 +162,8 @@ void BackPressed() {
     Lock = 1;
     ButtonTimer = MainTimer;
     ++CounterBackPin;
+    ButtonsObj.Back();
+    ScreanRefreash = 1;
   }
   if(ButtonTimer - MainTimer >=50) {
     Lock = 0;
@@ -153,6 +175,8 @@ void NextPressed() {
     Lock = 1;
     ButtonTimer = MainTimer;
     ++CounterNextPin;
+    ButtonsObj.Next();
+    ScreanRefreash = 1;
   }
   if(ButtonTimer - MainTimer >=50) {
     Lock = 0;
@@ -164,6 +188,8 @@ void UndoPressed() {
     Lock = 1;
     ButtonTimer = MainTimer;
     ++CounterUndoPressed;
+    ButtonsObj.Undo();
+    ScreanRefreash = 1;
   }
   if(ButtonTimer - MainTimer >=50) {
     Lock = 0;
